@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - Hostel Fee System</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="dashboard">
+        <div class="navbar">
+            <h2>🏠 Admin Dashboard</h2>
+            <div>
+                <span id="adminName"></span>
+                <button onclick="logout()" class="logout-btn">Logout</button>
+            </div>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card primary">
+                <h3>Total Students</h3>
+                <div class="number" id="totalStudents">0</div>
+            </div>
+            <div class="stat-card success">
+                <h3>Paid Members</h3>
+                <div class="number" id="paidMembers">0</div>
+            </div>
+            <div class="stat-card warning">
+                <h3>Due Members</h3>
+                <div class="number" id="dueMembers">0</div>
+            </div>
+            <div class="stat-card success">
+                <h3>Total Collection</h3>
+                <div class="number" id="totalCollection">₹0</div>
+            </div>
+            <div class="stat-card danger">
+                <h3>Due Amount</h3>
+                <div class="number" id="dueAmount">₹0</div>
+            </div>
+        </div>
+
+        <div class="add-user-form">
+            <h3>Add New Student</h3>
+            <div class="form-row">
+                <input type="text" id="newUsername" placeholder="Username" required>
+                <input type="password" id="newPassword" placeholder="Password" required>
+                <input type="text" id="newFullName" placeholder="Full Name" required>
+                <input type="text" id="newRoom" placeholder="Room Number" required>
+                <input type="email" id="newEmail" placeholder="Email" required>
+                <input type="text" id="newPhone" placeholder="Phone">
+                <button onclick="createUser()" class="submit-btn">Add Student</button>
+            </div>
+            <div id="userMessage" class="error-message"></div>
+        </div>
+
+        <div class="table-container">
+            <h3>Student Payment Status</h3>
+            <table id="studentsTable">
+                <thead>
+                    <tr>
+                        <th>Username</th>
+                        <th>Full Name</th>
+                        <th>Room No</th>
+                        <th>Email</th>
+                        <th>Jan</th>
+                        <th>Feb</th>
+                        <th>Mar</th>
+                        <th>Apr</th>
+                        <th>May</th>
+                        <th>Jun</th>
+                        <th>Jul</th>
+                        <th>Aug</th>
+                        <th>Sep</th>
+                        <th>Oct</th>
+                        <th>Nov</th>
+                        <th>Dec</th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody">
+                    <tr><td colspan="16">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div style="margin-top: 20px; display: flex; gap: 10px;">
+            <button onclick="downloadReport()" class="submit-btn">Download Excel Report</button>
+            <button onclick="sendReminders()" class="submit-btn" style="background: #ffc107;">Send Due Reminders</button>
+        </div>
+    </div>
+
+    <script>
+        const token = localStorage.getItem('token');
+        if (!token) window.location.href = 'login.html';
+
+        async function loadDashboard() {
+            try {
+                const statsRes = await fetch('http://localhost:3000/api/dashboard-stats', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const stats = await statsRes.json();
+                document.getElementById('totalStudents').textContent = stats.totalStudents;
+                document.getElementById('paidMembers').textContent = stats.paidMembers;
+                document.getElementById('dueMembers').textContent = stats.dueMembers;
+                document.getElementById('totalCollection').textContent = `₹${stats.totalCollection}`;
+                document.getElementById('dueAmount').textContent = `₹${stats.dueAmount}`;
+
+                const [studentsRes, paymentsRes] = await Promise.all([
+                    fetch('http://localhost:3000/api/students', { headers: { 'Authorization': `Bearer ${token}` } }),
+                    fetch('http://localhost:3000/api/payments/history', { headers: { 'Authorization': `Bearer ${token}` } })
+                ]);
+                const students = await studentsRes.json();
+                const payments = await paymentsRes.json();
+                displayStudentsTable(students.filter(s => s.role === 'user'), payments);
+            } catch (error) {
+                console.error('Error loading dashboard:', error);
+            }
+        }
+
+        function displayStudentsTable(students, payments) {
+            const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            const currentYear = new Date().getFullYear();
+            let html = '';
+            students.forEach(student => {
+                html += '<tr>';
+                html += `<td>${student.username}</td>`;
+                html += `<td>${student.full_name}</td>`;
+                html += `<td>${student.room_number}</td>`;
+                html += `<td>${student.email || ''}</td>`;
+                for (let month = 1; month <= 12; month++) {
+                    const paid = payments.some(p => p.user_id === student.id && p.month === month && p.year === currentYear && p.status === 'paid');
+                    html += `<td><span class="status-badge ${paid ? 'status-paid' : 'status-due'}">${paid ? '✓' : '✗'}</span></td>`;
+                }
+                html += '</tr>';
+            });
+            document.getElementById('tableBody').innerHTML = html;
+        }
+
+        async function createUser() {
+            const username = document.getElementById('newUsername').value;
+            const password = document.getElementById('newPassword').value;
+            const full_name = document.getElementById('newFullName').value;
+            const room_number = document.getElementById('newRoom').value;
+            const email = document.getElementById('newEmail').value;
+            const phone = document.getElementById('newPhone').value;
+            if (!username || !password || !full_name || !room_number || !email) {
+                document.getElementById('userMessage').textContent = 'All fields except phone are required';
+                return;
+            }
+            try {
+                const response = await fetch('http://localhost:3000/api/create-user', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify({ username, password, full_name, room_number, email, phone })
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    document.getElementById('userMessage').textContent = 'Student created successfully!';
+                    document.getElementById('userMessage').style.color = 'green';
+                    // Clear form
+                    document.getElementById('newUsername').value = '';
+                    document.getElementById('newPassword').value = '';
+                    document.getElementById('newFullName').value = '';
+                    document.getElementById('newRoom').value = '';
+                    document.getElementById('newEmail').value = '';
+                    document.getElementById('newPhone').value = '';
+                    loadDashboard();
+                } else {
+                    document.getElementById('userMessage').textContent = data.error;
+                }
+            } catch (error) {
+                document.getElementById('userMessage').textContent = 'Error creating user';
+            }
+        }
+
+        async function downloadReport() {
+            window.open('http://localhost:3000/api/download-report', '_blank');
+        }
+
+        async function sendReminders() {
+            if (!confirm('Send payment reminders to all due students?')) return;
+            try {
+                const response = await fetch('http://localhost:3000/api/send-reminders', {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const data = await response.json();
+                alert(data.message);
+            } catch (error) {
+                alert('Failed to send reminders');
+            }
+        }
+
+        function logout() {
+            localStorage.clear();
+            window.location.href = 'login.html';
+        }
+
+        loadDashboard();
+        setInterval(loadDashboard, 30000);
+    </script>
+</body>
+</html>

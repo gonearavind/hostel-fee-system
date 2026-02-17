@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Student Dashboard - Hostel Fee System</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+</head>
+<body>
+    <div class="dashboard">
+        <div class="navbar">
+            <h2>🏠 Student Dashboard</h2>
+            <div>
+                <span id="userName"></span>
+                <button onclick="logout()" class="logout-btn">Logout</button>
+            </div>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <h3>Monthly Fee</h3>
+                <div class="number">₹500</div>
+            </div>
+            <div class="stat-card">
+                <h3>Total Annual</h3>
+                <div class="number">₹6000</div>
+            </div>
+            <div class="stat-card success" id="paidCount">
+                <h3>Months Paid</h3>
+                <div class="number">0</div>
+            </div>
+            <div class="stat-card warning" id="dueCount">
+                <h3>Months Due</h3>
+                <div class="number">12</div>
+            </div>
+        </div>
+
+        <h3>Monthly Fee Status (Click on Due Month to Pay)</h3>
+        <div class="monthly-fee-grid" id="feeGrid"></div>
+
+        <div class="table-container" style="margin-top: 30px;">
+            <h3>Payment History</h3>
+            <table id="paymentHistory">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Month</th>
+                        <th>Year</th>
+                        <th>Amount</th>
+                        <th>Status</th>
+                        <th>Transaction ID</th>
+                    </tr>
+                </thead>
+                <tbody id="historyBody">
+                    <tr><td colspan="6">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="paymentModal" class="modal">
+        <div class="modal-content">
+            <h3>Confirm Payment</h3>
+            <p>Pay ₹500 for <span id="selectedMonth"></span>?</p>
+            <div class="modal-buttons">
+                <button onclick="processPayment()" class="confirm-btn">Proceed to Pay</button>
+                <button onclick="closeModal()" class="cancel-btn">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const token = localStorage.getItem('token');
+        if (!token) window.location.href = 'login.html';
+        document.getElementById('userName').textContent = `Welcome, ${localStorage.getItem('username')}`;
+
+        let selectedMonth = null;
+        let selectedYear = null;
+        let payments = [];
+
+        async function loadDashboard() {
+            try {
+                const response = await fetch('http://localhost:3000/api/payments/history', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                payments = await response.json();
+                displayFeeGrid();
+                displayPaymentHistory();
+            } catch (error) {
+                console.error('Error loading dashboard:', error);
+            }
+        }
+
+        function displayFeeGrid() {
+            const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+            const currentYear = new Date().getFullYear();
+            let paidMonths = 0;
+            let gridHtml = '';
+
+            for (let i = 0; i < months.length; i++) {
+                const month = i + 1;
+                const paid = payments.some(p => p.month === month && p.year === currentYear);
+                if (paid) paidMonths++;
+
+                gridHtml += `
+                    <div class="fee-card ${paid ? 'paid' : 'due'}" onclick="${!paid ? `showPaymentModal('${months[i]}', ${month}, ${currentYear})` : ''}">
+                        <h3>${months[i]}</h3>
+                        <div class="amount">₹500</div>
+                        <div class="status">${paid ? '✅ Paid' : '⏰ Due'}</div>
+                        ${!paid ? '<small>Click to pay</small>' : ''}
+                    </div>
+                `;
+            }
+
+            document.getElementById('feeGrid').innerHTML = gridHtml;
+            document.getElementById('paidCount').querySelector('.number').textContent = paidMonths;
+            document.getElementById('dueCount').querySelector('.number').textContent = 12 - paidMonths;
+        }
+
+        function displayPaymentHistory() {
+            const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            if (payments.length === 0) {
+                document.getElementById('historyBody').innerHTML = '<tr><td colspan="6">No payment history</td></tr>';
+                return;
+            }
+            let historyHtml = '';
+            payments.sort((a,b) => new Date(b.payment_date) - new Date(a.payment_date));
+            payments.forEach(payment => {
+                historyHtml += `
+                    <tr>
+                        <td>${new Date(payment.payment_date).toLocaleDateString()}</td>
+                        <td>${months[payment.month - 1]}</td>
+                        <td>${payment.year}</td>
+                        <td>₹${payment.amount}</td>
+                        <td><span class="status-badge status-paid">Paid</span></td>
+                        <td>${payment.payment_id ? payment.payment_id.slice(-8) : 'N/A'}</td>
+                    </tr>
+                `;
+            });
+            document.getElementById('historyBody').innerHTML = historyHtml;
+        }
+
+        function showPaymentModal(monthName, month, year) {
+            selectedMonth = month;
+            selectedYear = year;
+            document.getElementById('selectedMonth').textContent = monthName;
+            document.getElementById('paymentModal').style.display = 'flex';
+        }
+
+        async function processPayment() {
+            try {
+                const orderResponse = await fetch('http://localhost:3000/api/create-payment', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify({ month: selectedMonth, year: selectedYear })
+                });
+                const orderData = await orderResponse.json();
+                if (!orderResponse.ok) throw new Error(orderData.error);
+
+                const options = {
+                    key: orderData.key_id,
+                    amount: orderData.amount,
+                    currency: orderData.currency,
+                    name: 'Hostel Fee Management',
+                    description: `Fee for Month ${selectedMonth}/${selectedYear}`,
+                    order_id: orderData.order_id,
+                    handler: async function(response) {
+                        const verifyResponse = await fetch('http://localhost:3000/api/verify-payment', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                            body: JSON.stringify({
+                                razorpay_order_id: response.razorpay_order_id,
+                                razorpay_payment_id: response.razorpay_payment_id,
+                                razorpay_signature: response.razorpay_signature,
+                                month: selectedMonth,
+                                year: selectedYear
+                            })
+                        });
+                        const verifyData = await verifyResponse.json();
+                        if (verifyData.success) {
+                            alert('✅ Payment successful! Confirmation email sent.');
+                            closeModal();
+                            loadDashboard();
+                        } else {
+                            alert('❌ Payment verification failed');
+                        }
+                    },
+                    prefill: {
+                        name: localStorage.getItem('full_name') || '',
+                        email: localStorage.getItem('email') || '',
+                        contact: localStorage.getItem('phone') || ''
+                    },
+                    theme: { color: '#667eea' }
+                };
+                const razorpay = new Razorpay(options);
+                razorpay.open();
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('paymentModal').style.display = 'none';
+            selectedMonth = null;
+            selectedYear = null;
+        }
+
+        function logout() {
+            localStorage.clear();
+            window.location.href = 'login.html';
+        }
+
+        loadDashboard();
+        setInterval(loadDashboard, 60000);
+    </script>
+</body>
+</html>
