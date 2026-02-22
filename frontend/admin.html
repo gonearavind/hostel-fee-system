@@ -94,7 +94,7 @@
 
         async function loadDashboard() {
             try {
-                const statsRes = await fetch('http://localhost:3000/api/dashboard-stats', {
+                const statsRes = await fetch('/api/dashboard-stats', {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 const stats = await statsRes.json();
@@ -105,8 +105,8 @@
                 document.getElementById('dueAmount').textContent = `₹${stats.dueAmount}`;
 
                 const [studentsRes, paymentsRes] = await Promise.all([
-                    fetch('http://localhost:3000/api/students', { headers: { 'Authorization': `Bearer ${token}` } }),
-                    fetch('http://localhost:3000/api/payments/history', { headers: { 'Authorization': `Bearer ${token}` } })
+                    fetch('/api/students', { headers: { 'Authorization': `Bearer ${token}` } }),
+                    fetch('/api/payments/history', { headers: { 'Authorization': `Bearer ${token}` } })
                 ]);
                 const students = await studentsRes.json();
                 const payments = await paymentsRes.json();
@@ -147,7 +147,7 @@
                 return;
             }
             try {
-                const response = await fetch('http://localhost:3000/api/create-user', {
+                const response = await fetch('/api/create-user', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                     body: JSON.stringify({ username, password, full_name, room_number, email, phone })
@@ -173,13 +173,13 @@
         }
 
         async function downloadReport() {
-            window.open('http://localhost:3000/api/download-report', '_blank');
+            window.open('/api/download-report', '_blank');
         }
 
         async function sendReminders() {
             if (!confirm('Send payment reminders to all due students?')) return;
             try {
-                const response = await fetch('http://localhost:3000/api/send-reminders', {
+                const response = await fetch('/api/send-reminders', {
                     method: 'POST',
                     headers: { 'Authorization': `Bearer ${token}` }
                 });

@@ -81,7 +81,7 @@
 
         async function loadDashboard() {
             try {
-                const response = await fetch('http://localhost:3000/api/payments/history', {
+                const response = await fetch('/api/payments/history', {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 payments = await response.json();
@@ -150,7 +150,7 @@
 
         async function processPayment() {
             try {
-                const orderResponse = await fetch('http://localhost:3000/api/create-payment', {
+                const orderResponse = await fetch('/api/create-payment', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                     body: JSON.stringify({ month: selectedMonth, year: selectedYear })
@@ -166,7 +166,7 @@
                     description: `Fee for Month ${selectedMonth}/${selectedYear}`,
                     order_id: orderData.order_id,
                     handler: async function(response) {
-                        const verifyResponse = await fetch('http://localhost:3000/api/verify-payment', {
+                        const verifyResponse = await fetch('/api/verify-payment', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                             body: JSON.stringify({
